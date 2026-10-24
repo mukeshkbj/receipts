@@ -131,7 +131,8 @@ def status_history(ctx, cand):
                 'Return JSON: {"incidents_90d": <int or null>, "summary": "<one sentence>", "major": "<worst incident or null>"}',
             )
             est = est if isinstance(est, dict) else {}
-            info = f"~{est.get('incidents_90d')} incidents/90d. {est.get('summary','')} {est.get('major') or ''}"
+            cnt = est.get("incidents_90d")
+            info = f"~{cnt if cnt is not None else '?'} incidents/90d. {est.get('summary','')} {est.get('major') or ''}"
         except Exception as e:
             trace(run_id, "status_history", f"{cand['name']}: failed", str(e))
             return
@@ -219,8 +220,10 @@ def reputation(ctx, cand):
         targets = [{"id": cid, "type": "sentiment"}]
         cid2 = _add_claim(run_id, cand["id"], "viability", "Vendor appears stable and viable", "community")
         targets.append({"id": cid2, "type": "viability"})
+    viability_txt = (out.get("viability") or "").lower()
+    viab_contra = any(k in viability_txt for k in ("layoff", "wind down", "shutting", "acqui-hire", "bankrupt"))
     for t in targets:
-        s = sup if t["type"] == "sentiment" else (1 if "layoff" not in summary.lower() else -1)
+        s = sup if t["type"] == "sentiment" else (-1 if viab_contra else 1)
         _add_ev(run_id, t["id"], "reputation", "sentiment", src, summary, "", s)
     trace(run_id, "reputation", f"{cand['name']}: sentiment {sent:+.2f}, {len(out.get('complaints', []))} complaint patterns")
 

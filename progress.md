@@ -6,43 +6,39 @@ Deadline: **Oct 30, 2026, 10:00am PDT** · Track: Best Apps & Agents
 
 - Concept: **Receipts** — due-diligence agent; claims in, verdicts out
   (MEASURED / CITED / CONTRADICTED / UNVERIFIABLE).
-- Working end-to-end app committed: FastAPI + SQLite claims ledger +
-  single-page verdict-matrix UI + Qdrant bench harness + CLI runner.
-- Live verified run (run `1ea977fb0d3e`): vector-DB brief → 5 candidates,
-  70 claims, 15 measured / 29 cited / 4 contradicted / 36 unverifiable,
-  weighted scorecard (Weaviate 3.0 recommended), outreach drafts, decision
-  brief. Real catch: Pinecone 99.95% SLA claim contradicted by ~99.1%
-  observed status-page uptime.
-- UI visually verified via headless browser screenshot.
-- Design + plan docs under `docs/plans/`.
+- Working product: FastAPI + SQLite claims ledger + single-page UI +
+  Qdrant bench harness + CLI runner.
+- High-ROI features (commit ed1452c → latest):
+  - requirements gate (pause/edit/confirm), incumbent baseline,
+    reply ingestion, watch/alerts, telemetry, actor badges,
+    coverage grid, filters, markdown export, probe-honesty rule.
+- Verified end-to-end: 3 categories (vector DB, e-signature, PM),
+  requirements-gate API flow, UI screenshots.
+- Real catches: Pinecone 99.95% SLA vs ~99.1% observed; PandaDoc
+  ~98.9% observed uptime; DocuSign/Adobe negative sentiment.
+- Run cost: ~$0.05–0.07/run; ~65% of calls on Nano.
 
-## Gotchas learned (don't relearn)
+## Gotchas learned
 
-- Token Factory Nemotron 3 models are hybrid reasoners — hidden thinking
-  eats the completion budget. `enable_thinking: false` via
-  `chat_template_kwargs` for extraction; big `max_tokens` for reasoning.
-- Model regions differ: Ultra/Super = us-central1, Nano/Lightning =
-  eu-north1. `backend/models.py` routes per-model.
-- `json_chat` may return a bare list; `_d()` normalizes.
-- Keys live in `.env` (gitignored) — never in `.env.example`.
+- Token Factory Nemotron 3 = hybrid reasoners; `enable_thinking: false`
+  for extraction, big max_tokens for reasoning.
+- Model regions: Ultra/Super us-central1, Nano/Lightning eu-north1.
+- `json_chat` may return bare lists; `_d()` normalizes.
+- Keys in `.env` (gitignored), never `.env.example`.
 
-## Done (2)
+## Remaining (submission checklist)
 
-- Second verified run (run `3377cabd1edd`): e-signature brief →
-  SignNow/DocuSign/Adobe Sign/PandaDoc/GetAccept, 6 contradictions,
-  real incident data (PandaDoc ~98.9% observed uptime), recommendation
-  anchored to scorecard. Generalization proven across categories.
-
-## Remaining
-
-- Optional: BENCH_TARGETS for a real MEASURED latency cell
-  (`docker run -d -p 6333:6333 qdrant/qdrant` + env).
-- Deploy for a public demo URL (Vercel/tunnel or any host).
-- Record ≤3-min video; write tool feedback (`docs/feedback.md`);
-  submit on Devpost.
+- Deploy public demo URL (any host or tunnel; must stay up to ~Jan).
+- BENCH_TARGETS for a MEASURED latency cell in the video
+  (`docker run -d -p 6333:6333 qdrant/qdrant` + env line).
+- Record ≤3-min video: brief → requirements editor → live trace →
+  CONTRADICTED cell → coverage grid → outreach → paste-reply update.
+- Write `docs/feedback.md` (Token Factory/Tavily/Nebius notes) —
+  eligible for the $100 feedback prize.
+- Submit on Devpost; keep Fri as buffer.
 
 ## Commands
 
 - Server: `.venv/bin/uvicorn backend.app:app --port 8000`
-- CLI run: `.venv/bin/python run.py "<brief>"`
-- Run artifacts: `receipts.db` (SQLite)
+- CLI: `.venv/bin/python run.py "<brief>"` (auto-skips the gate)
+- Watch interval: `WATCH_INTERVAL_SEC` env (default 6h)
