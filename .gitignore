@@ -6,3 +6,8 @@ receipts.db
 node_modules/
 .venv/
 dist/
+
+# video assets (regenerable)
+video/raw/
+video/audio/*.mp3
+video/receipts-demo.mp4

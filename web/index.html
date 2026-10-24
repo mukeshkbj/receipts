@@ -238,7 +238,7 @@ async function renderResult() {
       <table class="text-xs"><tr><td class="pr-3 text-zinc-500"></td>${cands.map(c=>`<td class="px-1 text-center text-zinc-400 font-medium max-w-[90px] truncate">${esc(c.name)}</td>`).join('')}</tr>
       ${reqs.map(rq => `<tr><td class="pr-3 text-zinc-400 py-0.5 max-w-[220px] truncate" title="${esc(rq.label)}">${esc(rq.label)}</td>
         ${cands.map(c => { const s=(c.scores||[]).find(x=>x.req_key===rq.key); const v=s?s.score:null;
-          const thin = v===0 && /insufficient|no evidence|could not|unverifiable|no data/i.test(s?s.rationale||'');
+          const thin = v===0 && /insufficient|no evidence|could not|unverifiable|no data/i.test((s&&s.rationale)||'');
           const col = (v===null||thin)?'#27272a':v>=4?'#166534':v>=3?'#3f6212':v>=2?'#92400e':'#991b1b';
           return `<td class="px-1 py-0.5"><div class="scorecell" style="background:${col}" title="${s?esc(s.rationale||''):'—'}">${v===null?'–':thin?'—':v}</div></td>`; }).join('')}</tr>`).join('')}
       </table></div>`;

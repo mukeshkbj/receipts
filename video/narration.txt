@@ -1,0 +1,11 @@
+shot01|This is Receipts — a due-diligence agent for buying software. Vendors make claims. Receipts verifies them. Claims in, verdicts out.
+shot02|You give it a plain-English brief — what you need, your budget, your incumbent. Here we're buying a vector database, ten million vectors, p ninety-nine under thirty milliseconds.
+shot03|First it builds a weighted requirements model — and pauses. You edit the weights, confirm, then it spends your API budget. Human in the loop where it matters.
+shot04|Then the agent runs. Everything executes on Nebius Token Factory. NVIDIA Nemotron three Ultra plans and reasons. Nemotron Nano does bulk extraction — cheap and fast. Tavily gathers the evidence. And the verification checks measure.
+shot05|It finds candidates, pulls their marketing claims off their own pages, and audits them against their own docs, their public incident history, and real community sentiment.
+shot06|Here's the part no other tool does — it ran the product. A real twenty-thousand-vector benchmark against Chroma. Measured p fifty and p ninety-nine, attached as evidence. Not cited. Measured.
+shot07|And it catches marketing that isn't true. Pinecone's advertised nine-nine-point-nine-five percent SLA — versus its own status page showing about ninety-nine-point-one percent actual uptime. Contradicted, with evidence.
+shot08|Every claim becomes a verdict — measured, cited, contradicted, or unverifiable — and every score is traceable back to its evidence. The recommendation is anchored to the math, not the model's opinion.
+shot09|It drafts the pointed questions for the finalists — like "your status page shows seven incidents this quarter, what's your SLA credit process?"
+shot10|And it stays alive. Paste the vendor's reply and claims get re-audited on the spot.
+shot11|Thirty-five Token Factory calls. Six cents. Then it keeps watching after you buy. Receipts — claims in, verdicts out.

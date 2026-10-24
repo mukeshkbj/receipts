@@ -1,0 +1,11 @@
+shot01 9.52
+shot02 10.54
+shot03 9.61
+shot04 15.42
+shot05 9.98
+shot06 13.24
+shot07 14.30
+shot08 13.28
+shot09 8.96
+shot10 5.11
+shot11 7.99
