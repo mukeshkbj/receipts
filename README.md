@@ -79,12 +79,19 @@ export BENCH_TARGETS='{"qdrant": {"type":"qdrant","url":"http://localhost:6333"}
 
 # or a Qdrant Cloud free cluster
 export BENCH_TARGETS='{"qdrant": {"type":"qdrant","url":"https://xxx.qdrant.io","api_key":"..."}}'
+
+# or Chroma in-process — no server needed (pip install chromadb)
+export BENCH_TARGETS='{"chroma": {"type":"chroma","n":20000,"dim":256}}'
 ```
 
-`live_benchmark` matches the candidate name to a configured target, runs
-`bench/vdbench.py` (ingest + query latency), and attaches measured
-p50/p99/qps as evidence — contradicting marketed latency claims when they fail
-at your workload.
+`live_benchmark` matches the candidate name to a configured target and runs
+the matching harness — `bench/vdbench.py` for Qdrant, `bench/chromabench.py`
+for Chroma (in-process, ephemeral client) — attaching measured p50/p99/qps as
+evidence and contradicting marketed latency claims when they fail at your
+workload. `chromadb` is only needed for the chroma target.
+
+Tip: name candidates in the brief (`explicitly evaluate: Chroma, Qdrant`) to
+guarantee they are evaluated — the pipeline seeds brief-named candidates.
 
 ## Repo layout
 

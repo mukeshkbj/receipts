@@ -2,6 +2,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.parse
 
@@ -249,11 +250,12 @@ def live_benchmark(ctx, cand):
         return
     t = targets[key]
     trace(run_id, "live_benchmark", f"{cand['name']}: benchmarking via {t.get('type')} target")
-    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bench", "vdbench.py")
+    harness = {"qdrant": "vdbench.py", "chroma": "chromabench.py"}.get(t.get("type"), "vdbench.py")
+    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bench", harness)
     try:
-        env = dict(os.environ, BENCH_URL=t["url"], BENCH_KEY=t.get("api_key", ""))
+        env = dict(os.environ, BENCH_URL=t.get("url", ""), BENCH_KEY=t.get("api_key", ""))
         proc = subprocess.run(
-            ["python3", script, "--n", str(t.get("n", 10000)), "--dim", str(t.get("dim", 128))],
+            [sys.executable, script, "--n", str(t.get("n", 10000)), "--dim", str(t.get("dim", 128))],
             capture_output=True, text=True, timeout=300, env=env,
         )
         m = None

@@ -6,7 +6,7 @@ import time
 import uuid
 
 from . import db, models
-from .checks import CHECKS
+from .checks import CHECKS, _bench_targets
 from .util import trace, _cut
 
 _VALID_TYPES = {"spec", "price", "sla", "security", "viability", "sentiment"}
@@ -60,6 +60,7 @@ Return JSON:
   "category": "<short product category, e.g. 'managed vector database'>",
   "summary": "<one sentence restating the need>",
   "incumbent": {{"name": "<product the buyer already uses or pays for, if mentioned>", "vendor": "<company>", "monthly_cost": "<if mentioned>"}} or null,
+  "named_candidates": ["<product names the user explicitly asked to evaluate, if any>"],
   "requirements": [
     {{"key": "<snake_key>", "label": "<human label>", "weight": <1-10>, "must_have": <true|false>, "detail": "<what good looks like>"}}
   ]
@@ -125,6 +126,18 @@ Pick the {MAX_CANDIDATES} most credible, distinct options. Prefer official homep
             (run_id, c.get("name", "?"), c.get("vendor", ""), c.get("homepage", ""), category, c.get("notes", "")),
         )
         out.append({"id": cid, **c})
+    # user-named candidates are seeded deterministically — never LLM-filtered
+    for n in (req.get("named_candidates") or []):
+        if not isinstance(n, str):
+            continue
+        if any(n.lower() in (c.get("name") or "").lower() or (c.get("name") or "").lower() in n.lower() for c in out):
+            continue
+        cid = db.ins(
+            "INSERT INTO candidates(run_id,name,vendor,homepage,category,notes) VALUES(?,?,?,?,?,?)",
+            (run_id, n, "", "", category, "named in brief"),
+        )
+        out.append({"id": cid, "name": n, "vendor": "", "homepage": "", "notes": "named in brief"})
+        trace(run_id, "discover", f"brief-named candidate: {n}", actor="system")
     trace(run_id, "discover", f"{len(out)} candidates", ", ".join(c.get("name", "?") for c in out), actor="nano")
     return out
 
@@ -228,6 +241,10 @@ def plan_checks(run_id, cand, requirements):
         trace(run_id, "plan", f"tool planning failed, falling back ({e})", actor="ultra")
     if not ran:
         ran = ["doc_audit", "status_history", "reputation"]
+    # a configured bench target always applies, regardless of planner choice
+    targets = _bench_targets()
+    if targets and any(k.lower() in (cand.get("name") or "").lower() or k.lower() in (cand.get("vendor") or "").lower() for k in targets) and "live_benchmark" not in ran:
+        ran.append("live_benchmark")
     trace(run_id, "plan", f"{cand.get('name')}: checks selected", ", ".join(ran), actor="ultra")
     return ran
 
@@ -300,7 +317,9 @@ def score(run_id, requirements, cands):
         summary.append({"candidate_id": cand["id"], "name": cand["name"], "claims": rows})
     out = models.json_chat(
         "reason",
-        "You are a procurement analyst scoring candidates against a requirements model. Contradicted claims hurt; measured claims earn trust; unverifiable claims earn neither.",
+        """You are a procurement analyst scoring candidates against a requirements model.
+Rubric per cell: 0 = no relevant claim or a contradicted claim dominates; 1 = only unverifiable claims touch it; 2 = cited claim partially addresses it (same dimension, different scale/wording); 3 = cited claim directly addresses it; 4 = multiple strong citations or partial measurement; 5 = measured evidence meets the requirement.
+Use the full scale — relevant evidence earns credit even if imperfect. Contradicted claims hurt; measured claims earn trust.""",
         f"""Requirements: {json.dumps(requirements.get("requirements", []))}
 Candidates with verdicted claims:
 {json.dumps(summary, indent=1)[:24000]}
