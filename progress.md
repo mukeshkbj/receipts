@@ -26,13 +26,19 @@ Deadline: **Oct 30, 2026, 10:00am PDT** · Track: Best Apps & Agents
 - `json_chat` may return a bare list; `_d()` normalizes.
 - Keys live in `.env` (gitignored) — never in `.env.example`.
 
+## Done (2)
+
+- Second verified run (run `3377cabd1edd`): e-signature brief →
+  SignNow/DocuSign/Adobe Sign/PandaDoc/GetAccept, 6 contradictions,
+  real incident data (PandaDoc ~98.9% observed uptime), recommendation
+  anchored to scorecard. Generalization proven across categories.
+
 ## Remaining
 
-- Second demo run (e-signature brief) to prove generalization on camera.
 - Optional: BENCH_TARGETS for a real MEASURED latency cell
   (`docker run -d -p 6333:6333 qdrant/qdrant` + env).
 - Deploy for a public demo URL (Vercel/tunnel or any host).
-- README demo notes done; record ≤3-min video; write tool feedback;
+- Record ≤3-min video; write tool feedback (`docs/feedback.md`);
   submit on Devpost.
 
 ## Commands

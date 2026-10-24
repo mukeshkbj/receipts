@@ -15,12 +15,20 @@
   .v-contradicted { color:#f87171; border-color:#991b1b; background:#2a0a0a; }
   .v-unverifiable { color:#fbbf24; border-color:#92400e; background:#231803; }
   .v-pending      { color:#71717a; border-color:#3f3f46; background:#18181b; }
+  .a-ultra   { color:#c4b5fd; }
+  .a-nano    { color:#7dd3fc; }
+  .a-tavily  { color:#fdba74; }
+  .a-check   { color:#86efac; }
+  .a-system  { color:#71717a; }
   .stage { color:#a1a1aa; }
   .trace-line { animation: fadein .25s ease-out; }
   @keyframes fadein { from { opacity:0; transform:translateY(2px);} to { opacity:1;} }
   .card { background:#111113; border:1px solid #232326; }
   .claim-row:hover { background:#16161a; cursor:pointer; }
   .claim-row.active { background:#1a1a20; box-shadow: inset 2px 0 0 #6366f1; }
+  .chip { font-size:11px; padding:3px 10px; border-radius:99px; border:1px solid #3f3f46; color:#a1a1aa; cursor:pointer; }
+  .chip.on { border-color:#6366f1; color:#c7d2fe; background:#1e1b4b; }
+  .scorecell { width:34px; text-align:center; font-size:11px; border-radius:3px; padding:2px 0; }
   ::-webkit-scrollbar { width:8px; height:8px; } ::-webkit-scrollbar-thumb { background:#2a2a2e; border-radius:4px; }
 </style>
 </head>
@@ -36,12 +44,13 @@
   <section id="input-card" class="card rounded-lg p-5 mb-6">
     <label class="text-xs uppercase tracking-widest text-zinc-500">What are you buying?</label>
     <textarea id="brief" rows="3" class="mono w-full mt-2 bg-transparent text-sm text-zinc-100 outline-none resize-y placeholder:text-zinc-600"
-      placeholder="we need a managed vector database under $500/mo for ~10M vectors, p99 query latency under 50ms"></textarea>
+      placeholder="we need a managed vector database under $500/mo for ~10M vectors, p99 query latency under 50ms; we currently pay $600/mo for Pinecone"></textarea>
     <div class="flex items-center justify-between mt-3">
-      <div class="flex gap-2 text-xs">
+      <div class="flex gap-2 text-xs items-center">
         <button class="ex text-zinc-500 hover:text-zinc-300 underline decoration-dotted">vector db</button>
         <button class="ex text-zinc-500 hover:text-zinc-300 underline decoration-dotted">e-signature</button>
         <button class="ex text-zinc-500 hover:text-zinc-300 underline decoration-dotted">project management</button>
+        <label class="ml-4 text-zinc-500 flex items-center gap-1"><input type="checkbox" id="review-gate" checked> review requirements first</label>
       </div>
       <button id="run-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-5 py-2 rounded">Run diligence →</button>
     </div>
@@ -51,6 +60,19 @@
   <section id="recent" class="hidden mb-6">
     <h2 class="text-xs uppercase tracking-widest text-zinc-500 mb-2">past diligence runs</h2>
     <div id="recent-list" class="space-y-1"></div>
+  </section>
+
+  <!-- requirements gate -->
+  <section id="req-gate" class="hidden card rounded-lg p-5 mb-6 border-l-2 border-l-indigo-500">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-semibold text-white">Requirements model — confirm or edit</h2>
+      <span class="text-xs text-zinc-500">the agent scored nothing yet; weights drive the scorecard</span>
+    </div>
+    <div id="req-rows" class="mt-3 space-y-2"></div>
+    <div class="flex items-center justify-between mt-4">
+      <button id="req-add" class="text-xs text-indigo-400 hover:text-indigo-300">+ add requirement</button>
+      <button id="req-confirm" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-5 py-2 rounded">Confirm & run diligence →</button>
+    </div>
   </section>
 
   <!-- live -->
@@ -83,15 +105,16 @@
 const $ = s => document.querySelector(s);
 const esc = s => (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const V = v => `<span class="badge v-${v||'pending'}">${v||'pending'}</span>`;
+const ACTOR = a => `<span class="a-${a||'system'} text-[10px] font-semibold">${a==='check'?'◆':a==='tavily'?'⌕':a==='ultra'?'U':a==='nano'?'n':'·'}</span>`;
 
 const EXAMPLES = {
-  'vector db': 'we need a managed vector database under $500/mo for ~10M vectors, p99 query latency under 50ms',
+  'vector db': 'we need a managed vector database under $500/mo for ~10M vectors, p99 query latency under 50ms; we currently pay $700/mo for Pinecone',
   'e-signature': 'we need an e-signature tool for a 30-person startup, must have SOC2 and a real free tier',
   'project management': 'we need project management software for a 12-person eng team, under $15/seat/mo, must have an API and good uptime',
 };
 document.querySelectorAll('.ex').forEach(b => b.onclick = () => { $('#brief').value = EXAMPLES[b.textContent]; });
 
-let runId = null, lastTrace = 0, polling = null, loaded = false;
+let runId = null, lastTrace = 0, polling = null, loaded = false, reqData = null, activeFilter = 'all';
 
 async function loadRuns() {
   const runs = await (await fetch('/api/runs')).json();
@@ -104,7 +127,7 @@ async function loadRuns() {
     </button>`).join('');
   document.querySelectorAll('.run-link').forEach(b => b.onclick = () => {
     runId = b.dataset.id; lastTrace = 0; loaded = false;
-    $('#live').classList.remove('hidden');
+    $('#live').classList.remove('hidden'); $('#req-gate').classList.add('hidden');
     $('#trace').innerHTML = ''; $('#result').innerHTML = '';
     clearInterval(polling); polling = setInterval(poll, 1500); poll();
     window.scrollTo({top: 0, behavior: 'smooth'});
@@ -116,14 +139,15 @@ $('#run-btn').onclick = async () => {
   const brief = $('#brief').value.trim();
   if (brief.length < 10) return;
   $('#run-btn').disabled = true; $('#run-btn').textContent = 'running…';
-  const r = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({brief})});
+  const auto = !$('#review-gate').checked;
+  const r = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({brief, auto})});
   const d = await r.json();
   if (!d.run_id) { $('#run-btn').disabled = false; $('#run-btn').textContent = 'Run diligence →'; alert(d.error||'failed'); return; }
   runId = d.run_id; lastTrace = 0; loaded = false;
   $('#live').classList.remove('hidden');
   $('#trace').innerHTML = ''; $('#result').innerHTML = '';
   $('#input-card').classList.add('opacity-50');
-  polling = setInterval(poll, 1500); poll();
+  clearInterval(polling); polling = setInterval(poll, 1500); poll();
 };
 
 async function poll() {
@@ -133,39 +157,104 @@ async function poll() {
     lastTrace = Math.max(lastTrace, t.id);
     const line = document.createElement('div');
     line.className = 'trace-line';
-    line.innerHTML = `<span class="stage">[${esc(t.stage)}]</span> ${esc(t.event)}${t.detail ? `<div class="text-zinc-600 pl-16 truncate" title="${esc(t.detail)}">${esc(t.detail.slice(0,160))}</div>` : ''}`;
+    line.innerHTML = `${ACTOR(t.actor)} <span class="stage">[${esc(t.stage)}]</span> ${esc(t.event)}${t.detail ? `<div class="text-zinc-600 pl-16 truncate" title="${esc(t.detail)}">${esc(t.detail.slice(0,160))}</div>` : ''}`;
     $('#trace').appendChild(line);
     $('#trace').scrollTop = $('#trace').scrollHeight;
   }
-  if (d.run.status !== 'running') {
+  if (d.run.status === 'awaiting_requirements' && $('#req-gate').classList.contains('hidden')) {
+    const res = await (await fetch(`/api/runs/${runId}/result`)).json();
+    showReqEditor(res.requirements || {});
+  }
+  if (d.run.status !== 'running' && d.run.status !== 'awaiting_requirements') {
     clearInterval(polling);
     $('#run-btn').disabled = false; $('#run-btn').textContent = 'Run diligence →';
     $('#input-card').classList.remove('opacity-50');
+    $('#req-gate').classList.add('hidden');
     renderResult();
     loadRuns();
   }
 }
 
+function showReqEditor(req) {
+  reqData = JSON.parse(JSON.stringify(req));
+  $('#req-gate').classList.remove('hidden');
+  renderReqRows();
+}
+function renderReqRows() {
+  $('#req-rows').innerHTML = (reqData.requirements||[]).map((r,i) => `
+    <div class="flex items-center gap-3 text-sm">
+      <input type="checkbox" ${r.must_have?'checked':''} data-i="${i}" class="req-mh" title="must-have">
+      <input class="bg-transparent border-b border-zinc-700 flex-1 text-zinc-200 text-sm py-1 req-label" data-i="${i}" value="${esc(r.label)}">
+      <input type="number" min="0" max="10" step="0.5" value="${r.weight}" data-i="${i}" class="req-w w-16 bg-transparent border border-zinc-700 rounded px-2 py-1 text-xs text-right">
+      <button class="req-del text-zinc-600 hover:text-red-400" data-i="${i}">×</button>
+    </div>`).join('') + `<div class="text-xs text-zinc-600 pt-1">☑ = must-have · weight 0–10 · incumbent: ${esc((reqData.incumbent&&reqData.incumbent.name)||'none detected')}</div>`;
+  document.querySelectorAll('.req-del').forEach(b => b.onclick = () => { reqData.requirements.splice(+b.dataset.i,1); renderReqRows(); });
+}
+$('#req-add').onclick = () => { reqData.requirements.push({key:'req_'+Date.now(), label:'new requirement', weight:1, must_have:false, detail:''}); renderReqRows(); };
+$('#req-confirm').onclick = async () => {
+  document.querySelectorAll('.req-label').forEach(el => reqData.requirements[+el.dataset.i].label = el.value);
+  document.querySelectorAll('.req-label').forEach(el => reqData.requirements[+el.dataset.i].key = el.value.toLowerCase().replace(/[^a-z0-9]+/g,'_'));
+  document.querySelectorAll('.req-w').forEach(el => reqData.requirements[+el.dataset.i].weight = parseFloat(el.value)||1);
+  document.querySelectorAll('.req-mh').forEach(el => reqData.requirements[+el.dataset.i].must_have = el.checked);
+  $('#req-confirm').disabled = true;
+  await fetch(`/api/runs/${runId}/requirements`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({requirements: reqData})});
+  $('#req-gate').classList.add('hidden');
+  $('#req-confirm').disabled = false;
+};
+
 async function renderResult() {
   const d = await (await fetch(`/api/runs/${runId}/result`)).json();
-  if (loaded) return; loaded = true;
+  if (d.error) { $('#result').innerHTML = '<div class="text-zinc-500 text-sm">no result</div>'; return; }
+  window._result = d;
   const b = d.brief || {};
+  const u = d.usage || {};
   const cands = (d.candidates||[]).slice().sort((a,b2) => (b2.weighted||0)-(a.weighted||0));
+  const reqs = (d.requirements && d.requirements.requirements) || [];
+
   let html = '';
+  // recommendation + telemetry + watch/export bar
   if (b.recommendation) {
+    const modelShare = Object.entries(u.by_model||{}).map(([m,x]) => `${m.split('/').pop().replace('Nemotron-3-','').replace('NVIDIA-Nemotron-3-','')}: ${x.calls} calls`).join(' · ');
     html += `<div class="card rounded-lg p-5 mb-4 border-l-2 border-l-indigo-500">
-      <div class="text-xs uppercase tracking-widest text-zinc-500">recommendation</div>
+      <div class="flex items-center justify-between">
+        <div class="text-xs uppercase tracking-widest text-zinc-500">recommendation</div>
+        <div class="flex gap-2 items-center">
+          ${d.watch ? '<span class="badge v-cited">watching</span>' : `<button id="watch-btn" class="chip">watch this market</button>`}
+          <a href="/api/runs/${runId}/export" target="_blank" class="chip">export brief ↗</a>
+        </div>
+      </div>
       <div class="text-xl font-semibold text-white mt-1">${esc(b.recommendation)}</div>
       <p class="text-sm text-zinc-400 mt-1">${esc(b.summary||'')}</p>
       ${(b.watch_outs||[]).length ? `<ul class="mt-2 text-xs text-amber-400/90 space-y-1">${b.watch_outs.map(w=>`<li>⚠ ${esc(w)}</li>`).join('')}</ul>`:''}
+      ${u.by_model ? `<div class="mono text-[11px] text-zinc-500 mt-3 pt-3 border-t border-zinc-800">token factory: ${modelShare} · run cost $${u.cost_usd}</div>`:''}
+      ${(d.alerts||[]).length ? `<div class="mt-2 text-xs text-red-300">${d.alerts.map(a=>`<div>▲ ${esc(a.summary)}</div>`).join('')}</div>`:''}
     </div>`;
   }
+
+  // requirement coverage strip
+  if (reqs.length && cands.length) {
+    html += `<div class="card rounded-lg p-4 mb-4 overflow-x-auto">
+      <div class="text-xs uppercase tracking-widest text-zinc-500 mb-2">requirement coverage</div>
+      <table class="text-xs"><tr><td class="pr-3 text-zinc-500"></td>${cands.map(c=>`<td class="px-1 text-center text-zinc-400 font-medium max-w-[90px] truncate">${esc(c.name)}</td>`).join('')}</tr>
+      ${reqs.map(rq => `<tr><td class="pr-3 text-zinc-400 py-0.5 max-w-[220px] truncate" title="${esc(rq.label)}">${esc(rq.label)}</td>
+        ${cands.map(c => { const s=(c.scores||[]).find(x=>x.req_key===rq.key); const v=s?s.score:null;
+          const col = v===null?'#27272a':v>=4?'#166534':v>=3?'#3f6212':v>=2?'#92400e':'#991b1b';
+          return `<td class="px-1 py-0.5"><div class="scorecell" style="background:${col}" title="${s?esc(s.rationale||''):'—'}">${v===null?'–':v}</div></td>`; }).join('')}</tr>`).join('')}
+      </table></div>`;
+  }
+
+  // verdict filters
+  html += `<div class="flex gap-2 mb-3" id="filters">
+    ${['all','contradicted','unverifiable','measured','cited'].map(f=>`<button class="chip ${f===activeFilter?'on':''}" data-f="${f}">${f}</button>`).join('')}
+  </div>`;
+
   for (const c of cands) {
     const vc = {};
     (c.claims||[]).forEach(cl => vc[cl.verdict||'unverifiable'] = (vc[cl.verdict||'unverifiable']||0)+1);
     html += `<div class="card rounded-lg p-4 mb-4">
       <div class="flex items-center justify-between">
         <div><span class="font-semibold text-white">${esc(c.name)}</span>
+          ${c.incumbent?'<span class="badge v-pending ml-2">incumbent</span>':''}
           <span class="text-xs text-zinc-500 ml-2">${esc(c.vendor)}</span></div>
         <div class="flex items-center gap-3">
           <span class="text-xs text-zinc-500">${vc.measured||0} measured · ${vc.cited||0} cited · <span class="text-red-400">${vc.contradicted||0} contradicted</span> · ${vc.unverifiable||0} unverifiable</span>
@@ -175,11 +264,18 @@ async function renderResult() {
       <div class="text-xs text-zinc-500 mt-1">${esc(c.notes||'')}</div>
       <table class="w-full mt-3 text-sm">
         ${(c.claims||[]).map(cl => `
-          <tr class="claim-row border-t border-zinc-800/60" data-cand="${c.id}" data-claim="${cl.id}">
+          <tr class="claim-row border-t border-zinc-800/60" data-cand="${c.id}" data-claim="${cl.id}" data-verdict="${cl.verdict||'unverifiable'}">
             <td class="py-2 pr-3 text-zinc-300">${esc(cl.text)}</td>
             <td class="py-2 text-right whitespace-nowrap">${V(cl.verdict)}</td>
           </tr>`).join('')}
       </table>
+      <details class="mt-3">
+        <summary class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300">paste a vendor reply → re-audit claims</summary>
+        <div class="mt-2 flex gap-2">
+          <textarea class="reply-text flex-1 bg-zinc-900 border border-zinc-700 rounded p-2 text-xs mono" rows="3" placeholder="paste the vendor's email reply here — the agent re-audits the claims it addresses"></textarea>
+          <button class="reply-btn self-end bg-zinc-700 hover:bg-zinc-600 text-xs px-3 py-2 rounded" data-cand="${c.id}">ingest</button>
+        </div>
+      </details>
     </div>`;
   }
   if ((d.outreach||[]).length) {
@@ -194,9 +290,24 @@ async function renderResult() {
       </div>`;
     }
   }
-  $('#result').innerHTML = html || '<div class="text-zinc-500 text-sm">no result</div>';
-  window._result = d;
+  $('#result').innerHTML = html;
+  applyFilter();
   document.querySelectorAll('.claim-row').forEach(row => row.onclick = () => openDrawer(row));
+  document.querySelectorAll('#filters .chip').forEach(ch => ch.onclick = () => { activeFilter = ch.dataset.f; document.querySelectorAll('#filters .chip').forEach(x=>x.classList.toggle('on', x===ch)); applyFilter(); });
+  const wb = $('#watch-btn'); if (wb) wb.onclick = async () => { await fetch(`/api/runs/${runId}/watch`, {method:'POST'}); wb.outerHTML = '<span class="badge v-cited">watching</span>'; };
+  document.querySelectorAll('.reply-btn').forEach(btn => btn.onclick = async () => {
+    const ta = btn.parentElement.querySelector('.reply-text');
+    if (!ta.value.trim()) return;
+    btn.textContent = '…';
+    await fetch(`/api/runs/${runId}/replies`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({candidate_id:+btn.dataset.cand, text:ta.value})});
+    renderResult();
+  });
+}
+
+function applyFilter() {
+  document.querySelectorAll('.claim-row').forEach(r => {
+    r.style.display = (activeFilter==='all' || r.dataset.verdict===activeFilter) ? '' : 'none';
+  });
 }
 
 function openDrawer(row) {

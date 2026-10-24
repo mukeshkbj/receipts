@@ -10,7 +10,7 @@ from backend import db, pipeline
 def main():
     brief_text = " ".join(sys.argv[1:]) or "we need a managed vector database under $500/mo for ~10M vectors, p99 query latency under 50ms"
     db.init()
-    run_id = pipeline.start(brief_text)
+    run_id = pipeline.start(brief_text, auto=True)
     print(f"run {run_id}")
     seen = 0
     while True:

@@ -1,8 +1,12 @@
 import json
 import os
 import re
+import threading
+import time
 
 from openai import OpenAI
+
+from . import db
 
 _REGIONAL_BASE = "https://api.tokenfactory.{region}.nebius.com/v1/"
 
@@ -18,6 +22,35 @@ _clients = {}
 # Nemotron 3 models are hybrid reasoners — hidden thinking consumes the
 # completion budget. Off for extraction; on for reasoning calls.
 THINK = {"reason": True, "extract": False, "fast": False}
+
+# USD per 1M tokens, from the Token Factory catalog.
+PRICES = {
+    "nvidia/Nemotron-3-Ultra-550b-a55b": (1.0, 3.0),
+    "nvidia/nemotron-3-super-120b-a12b": (0.3, 0.9),
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": (0.06, 0.24),
+    "nvidia/Nemotron-3_5-Lightning": (0.06, 0.24),
+}
+
+_run_ctx = threading.local()
+
+
+def set_run_id(run_id):
+    _run_ctx.run_id = run_id
+
+
+def _log_usage(model, purpose, resp):
+    run_id = getattr(_run_ctx, "run_id", None)
+    u = getattr(resp, "usage", None)
+    if run_id and u:
+        db.ins(
+            "INSERT INTO usage(run_id,ts,model,purpose,in_tok,out_tok) VALUES(?,?,?,?,?,?)",
+            (run_id, time.time(), model, purpose, u.prompt_tokens or 0, u.completion_tokens or 0),
+        )
+
+
+def cost_usd(model, in_tok, out_tok):
+    p = PRICES.get(model, (0.5, 1.5))
+    return (in_tok * p[0] + out_tok * p[1]) / 1e6
 
 
 def client(region):
@@ -41,6 +74,7 @@ def chat(purpose, messages, temperature=0.3, max_tokens=4096, tools=None, think=
     if not (THINK[purpose] if think is None else think):
         kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
     resp = client(region).chat.completions.create(**kwargs)
+    _log_usage(model, purpose, resp)
     return resp.choices[0].message
 
 

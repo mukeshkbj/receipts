@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS trace (
   ts REAL NOT NULL,
   stage TEXT NOT NULL,
   event TEXT NOT NULL,
-  detail TEXT DEFAULT ''
+  detail TEXT DEFAULT '',
+  actor TEXT DEFAULT 'system'
 );
 
 CREATE TABLE IF NOT EXISTS candidates (
@@ -26,7 +27,8 @@ CREATE TABLE IF NOT EXISTS candidates (
   vendor TEXT DEFAULT '',
   homepage TEXT DEFAULT '',
   category TEXT DEFAULT '',
-  notes TEXT DEFAULT ''
+  notes TEXT DEFAULT '',
+  incumbent INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS claims (
@@ -78,7 +80,37 @@ CREATE TABLE IF NOT EXISTS outreach (
   questions TEXT DEFAULT '[]'
 );
 
+CREATE TABLE IF NOT EXISTS usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  ts REAL NOT NULL,
+  model TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  in_tok INTEGER DEFAULT 0,
+  out_tok INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS watches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  snapshot TEXT DEFAULT '{}',
+  created_at REAL NOT NULL,
+  last_check REAL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  watch_id INTEGER NOT NULL REFERENCES watches(id),
+  run_id TEXT NOT NULL,
+  ts REAL NOT NULL,
+  check_name TEXT DEFAULT '',
+  summary TEXT DEFAULT '',
+  detail TEXT DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_trace_run ON trace(run_id, id);
 CREATE INDEX IF NOT EXISTS idx_claims_cand ON claims(run_id, candidate_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_claim ON evidence(claim_id);
 CREATE INDEX IF NOT EXISTS idx_verdicts_claim ON verdicts(claim_id);
+CREATE INDEX IF NOT EXISTS idx_usage_run ON usage(run_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_watch ON alerts(watch_id);

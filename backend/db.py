@@ -22,6 +22,15 @@ def conn():
 def init():
     with conn() as c:
         c.executescript(open(_SCHEMA).read())
+        # lightweight migrations for DBs created before these columns existed
+        for sql in (
+            "ALTER TABLE trace ADD COLUMN actor TEXT DEFAULT 'system'",
+            "ALTER TABLE candidates ADD COLUMN incumbent INTEGER DEFAULT 0",
+        ):
+            try:
+                c.execute(sql)
+            except sqlite3.OperationalError:
+                pass
 
 
 def q(sql, args=()):
