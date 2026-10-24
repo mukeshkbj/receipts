@@ -353,6 +353,7 @@ def brief(run_id, requirements, cands):
         b = _d(b, "summary")
     except Exception:
         b = {"recommendation": winner or "", "summary": "", "watch_outs": []}
+    b["recommendation"] = winner or b.get("recommendation", "")
     b["ranked"] = per
     db.touch_run(run_id, brief_json=json.dumps(b))
     trace(run_id, "brief", f"Recommendation: {b.get('recommendation')}")
