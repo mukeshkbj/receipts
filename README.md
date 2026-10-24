@@ -68,6 +68,23 @@ Web UI:
 Type a purchase brief → watch the agent trace stream → click any verdict cell
 for its evidence → read the decision brief + drafted outreach.
 
+## Deploy
+
+The Dockerfile runs the full app (SQLite is embedded and self-initializing).
+Set `NEBIUS_API_KEY` + `TAVILY_API_KEY` (and optional `BENCH_TARGETS`) as
+env vars on any container host:
+
+```bash
+docker build -t receipts .
+docker run -p 8000:8000 --env-file .env receipts
+```
+
+Google Cloud Run example:
+
+```bash
+gcloud run deploy receipts --source . --set-env-vars "NEBIUS_API_KEY=...,TAVILY_API_KEY=..." --allow-unauthenticated
+```
+
 ## Live benchmarks
 
 Point `BENCH_TARGETS` at a real target to get MEASURED verdicts:

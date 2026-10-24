@@ -1,0 +1,8 @@
+.env
+receipts.db
+.venv
+.git
+docs
+progress.md
+__pycache__
+*.pyc
