@@ -15,6 +15,10 @@ MODELS = {
 
 _clients = {}
 
+# Nemotron 3 models are hybrid reasoners — hidden thinking consumes the
+# completion budget. Off for extraction; on for reasoning calls.
+THINK = {"reason": True, "extract": False, "fast": False}
+
 
 def client(region):
     if region not in _clients:
@@ -28,12 +32,14 @@ def model_id(purpose):
     return os.environ.get("MODEL_" + purpose.upper(), model)
 
 
-def chat(purpose, messages, temperature=0.3, max_tokens=4096, tools=None):
+def chat(purpose, messages, temperature=0.3, max_tokens=4096, tools=None, think=None):
     model = model_id(purpose)
     _, region = MODELS[purpose]
     kwargs = dict(model=model, messages=messages, temperature=temperature, max_tokens=max_tokens)
     if tools:
         kwargs.update(tools=tools, tool_choice="auto")
+    if not (THINK[purpose] if think is None else think):
+        kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
     resp = client(region).chat.completions.create(**kwargs)
     return resp.choices[0].message
 

@@ -47,6 +47,12 @@
     </div>
   </section>
 
+  <!-- recent runs -->
+  <section id="recent" class="hidden mb-6">
+    <h2 class="text-xs uppercase tracking-widest text-zinc-500 mb-2">past diligence runs</h2>
+    <div id="recent-list" class="space-y-1"></div>
+  </section>
+
   <!-- live -->
   <section id="live" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="lg:col-span-1">
@@ -87,6 +93,25 @@ document.querySelectorAll('.ex').forEach(b => b.onclick = () => { $('#brief').va
 
 let runId = null, lastTrace = 0, polling = null, loaded = false;
 
+async function loadRuns() {
+  const runs = await (await fetch('/api/runs')).json();
+  if (!runs.length) return;
+  $('#recent').classList.remove('hidden');
+  $('#recent-list').innerHTML = runs.map(r => `
+    <button class="run-link block w-full text-left card rounded px-3 py-2 text-sm hover:border-zinc-600 transition-colors" data-id="${r.id}">
+      <span class="text-zinc-300">${esc(r.brief.slice(0, 90))}</span>
+      <span class="text-xs ml-2 ${r.status==='done'?'text-emerald-500':r.status==='error'?'text-red-400':'text-amber-400'}">${r.status}</span>
+    </button>`).join('');
+  document.querySelectorAll('.run-link').forEach(b => b.onclick = () => {
+    runId = b.dataset.id; lastTrace = 0; loaded = false;
+    $('#live').classList.remove('hidden');
+    $('#trace').innerHTML = ''; $('#result').innerHTML = '';
+    clearInterval(polling); polling = setInterval(poll, 1500); poll();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  });
+}
+loadRuns();
+
 $('#run-btn').onclick = async () => {
   const brief = $('#brief').value.trim();
   if (brief.length < 10) return;
@@ -117,6 +142,7 @@ async function poll() {
     $('#run-btn').disabled = false; $('#run-btn').textContent = 'Run diligence →';
     $('#input-card').classList.remove('opacity-50');
     renderResult();
+    loadRuns();
   }
 }
 

@@ -84,6 +84,8 @@ def doc_audit(ctx, cand):
     )
     n = 0
     sup = {"supports": 1, "contradicts": -1, "absent": 0}
+    if isinstance(verdicts, list):
+        verdicts = {"results": verdicts}
     for r in verdicts.get("results", []):
         if r.get("id") in {c["id"] for c in targets}:
             _add_ev(run_id, r["id"], "doc_audit", "doc", r.get("url", ""), r.get("evidence", ""), "", sup.get(r.get("verdict"), 0))
@@ -128,6 +130,7 @@ def status_history(ctx, cand):
                 f"Vendor: {cand['name']}\n{txt}\n"
                 'Return JSON: {"incidents_90d": <int or null>, "summary": "<one sentence>", "major": "<worst incident or null>"}',
             )
+            est = est if isinstance(est, dict) else {}
             info = f"~{est.get('incidents_90d')} incidents/90d. {est.get('summary','')} {est.get('major') or ''}"
         except Exception as e:
             trace(run_id, "status_history", f"{cand['name']}: failed", str(e))
@@ -205,6 +208,7 @@ def reputation(ctx, cand):
         f"Product: {cand['name']} ({cand.get('vendor','')})\nResults:\n{blob[:24000]}\n"
         'Return JSON: {"sentiment": <-1.0..1.0>, "complaints": ["<pattern>"], "viability": "<funding/layoffs/acquisition signal, one sentence>", "sources": ["<url>"]}',
     )
+    out = out if isinstance(out, dict) else {"sentiment": 0}
     sent = out.get("sentiment", 0) or 0
     sup = 1 if sent > 0.15 else (-1 if sent < -0.15 else 0)
     summary = f"sentiment {sent:+.2f}; complaints: {'; '.join(out.get('complaints', [])[:4]) or 'none major'}; viability: {out.get('viability','')}"
@@ -212,9 +216,9 @@ def reputation(ctx, cand):
     targets = _claims(cand["id"], {"sentiment", "viability"})
     if not targets:
         cid = _add_claim(run_id, cand["id"], "sentiment", "Users report a positive overall experience", "community")
-        targets = [dict(id=cid)]
+        targets = [{"id": cid, "type": "sentiment"}]
         cid2 = _add_claim(run_id, cand["id"], "viability", "Vendor appears stable and viable", "community")
-        targets.append(dict(id=cid2))
+        targets.append({"id": cid2, "type": "viability"})
     for t in targets:
         s = sup if t["type"] == "sentiment" else (1 if "layoff" not in summary.lower() else -1)
         _add_ev(run_id, t["id"], "reputation", "sentiment", src, summary, "", s)
@@ -338,6 +342,8 @@ def spec_independent(ctx, cand):
         max_tokens=4000,
     )
     sup = {"supports": 1, "contradicts": -1, "absent": 0}
+    if isinstance(out, list):
+        out = {"results": out}
     n = 0
     for r in out.get("results", []):
         if r.get("id") in {c["id"] for c in spec_claims}:

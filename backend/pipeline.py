@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -7,6 +8,31 @@ import uuid
 from . import db, models
 from .checks import CHECKS
 from .util import trace, _cut
+
+_VALID_TYPES = {"spec", "price", "sla", "security", "viability", "sentiment"}
+
+
+def _norm_claim_type(cl):
+    """Fix model-typed claims: invalid types get keyword-inferred; plain 'spec'
+    gets upgraded to a sharper type when the text demands it."""
+    t = (cl.get("type") or "").lower()
+    txt = (cl.get("text") or "").lower()
+    if re.search(r"\$|price|pricing|cost|per month|/mo|free tier|free plan", txt):
+        guess = "price"
+    elif re.search(r"soc ?2|iso ?27001|gdpr|hipaa|encrypt|compliance|security|sso|rbac", txt):
+        guess = "security"
+    elif re.search(r"uptime|sla|availab|9\d(?:\.\d+)?\s*%", txt):
+        guess = "sla"
+    else:
+        guess = None
+    if t in _VALID_TYPES and t != "spec":
+        return t
+    return guess or "spec"
+
+
+def _d(x, key):
+    """Normalize a json_chat result: wrap bare lists as {key: list}."""
+    return x if isinstance(x, dict) else {key: x}
 
 MAX_CLAIMS_PER_CANDIDATE = 14
 MAX_CANDIDATES = 5
@@ -38,8 +64,9 @@ Return JSON:
   ]
 }}
 4-8 requirements. Weights must sum to 10 roughly. Include budget if given.""",
-        max_tokens=2048,
+        max_tokens=8192,
     )
+    req = _d(req, "requirements")
     db.touch_run(run_id, requirements=json.dumps(req), category=req.get("category", ""))
     trace(run_id, "elicit", f"{len(req.get('requirements', []))} requirements", json.dumps(req.get("requirements", []))[:2000])
     return req
@@ -72,6 +99,7 @@ Search hits:
 Return JSON: {{"candidates": [{{"name": "<product>", "vendor": "<company>", "homepage": "<https://...>", "notes": "<one-line positioning>"}}]}}
 Pick the {MAX_CANDIDATES} most credible, distinct options. Prefer official homepages for the URL.""",
     )
+    cands = _d(cands, "candidates")
     out = []
     for c in (cands.get("candidates") or [])[:MAX_CANDIDATES]:
         cid = db.ins(
@@ -118,11 +146,12 @@ Return JSON: {{"claims": [{{"type": "spec|price|sla|security|viability|sentiment
 Up to {MAX_CLAIMS_PER_CANDIDATE} claims, most checkable first.""",
         max_tokens=3000,
     )
+    claims = _d(claims, "claims")
     n = 0
     for cl in (claims.get("claims") or [])[:MAX_CLAIMS_PER_CANDIDATE]:
         db.ins(
             "INSERT INTO claims(run_id,candidate_id,type,text,source_url) VALUES(?,?,?,?,?)",
-            (run_id, cand["id"], cl.get("type", "spec"), cl.get("text", "")[:500], cl.get("source_url", "")),
+            (run_id, cand["id"], _norm_claim_type(cl), cl.get("text", "")[:500], cl.get("source_url", "")),
         )
         n += 1
     trace(run_id, "ingest", f"{cand.get('name')}: {n} claims extracted")
@@ -159,7 +188,8 @@ def plan_checks(run_id, cand, requirements):
                 {"role": "user", "content": prompt},
             ],
             tools=tools,
-            max_tokens=1024,
+            max_tokens=2048,
+            think=False,
         )
         calls = msg.tool_calls or []
         for tc in calls:
@@ -218,7 +248,9 @@ def rationale_pass(run_id):
             "Write one-sentence rationales for claim verdicts.",
             f"Claims and their evidence:\n{json.dumps(rows, indent=1)[:16000]}\n"
             'Return JSON: {"rationales": [{"vid": <id>, "rationale": "<one sentence>"}]}',
+            max_tokens=8192,
         )
+        rs = _d(rs, "rationales")
         for r in rs.get("rationales", []):
             with db.conn() as c:
                 c.execute("UPDATE verdicts SET rationale=? WHERE id=?", (r.get("rationale", "")[:500], r.get("vid")))
@@ -246,8 +278,9 @@ Candidates with verdicted claims:
 
 Return JSON: {{"scores": [{{"candidate_id": <id>, "req_key": "<requirement key>", "score": <0-5>, "rationale": "<one sentence>"}}]}}
 Score every candidate on every requirement.""",
-        max_tokens=6000,
+        max_tokens=16384,
     )
+    out = _d(out, "scores")
     n = 0
     weights = {r["key"]: r.get("weight", 1) for r in requirements.get("requirements", [])}
     for s in out.get("scores", []):
@@ -279,7 +312,9 @@ def negotiate(run_id, cands, requirements):
                 "Draft a concise vendor-outreach email. Use the weak claims as pointed, specific questions — polite, professional, no fluff.",
                 f"Vendor: {name}\nRequirements: {json.dumps(requirements.get('requirements', []))[:4000]}\nUnverified/contradicted claims:\n{json.dumps(weak, indent=1)}\n"
                 'Return JSON: {"subject": "...", "body": "...", "questions": ["<pointed question>", ...]}',
+                max_tokens=12288,
             )
+            d = _d(d, "body")
             db.ins(
                 "INSERT INTO outreach(run_id,candidate_id,subject,body,questions) VALUES(?,?,?,?,?)",
                 (run_id, cid, d.get("subject", ""), d.get("body", ""), json.dumps(d.get("questions", []))),
@@ -313,7 +348,9 @@ def brief(run_id, requirements, cands):
             "Write a decision brief. Direct, evidence-first, no filler.",
             f"Requirements: {json.dumps(requirements.get('requirements', []))}\nRanked candidates with verdict counts:\n{json.dumps(per, indent=1)}\n"
             'Return JSON: {"recommendation": "<name>", "summary": "<3 sentences max>", "watch_outs": ["<top risks>"]}',
+            max_tokens=8192,
         )
+        b = _d(b, "summary")
     except Exception:
         b = {"recommendation": winner or "", "summary": "", "watch_outs": []}
     b["ranked"] = per
